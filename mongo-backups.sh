@@ -5,46 +5,53 @@ BACKUP_DIR="/backups/mongodb"
 LOG_FILE="/backups/logs.txt"
 TODAY=$(date +"%Y-%m-%d")
 YESTERDAY=$(date -d "yesterday" +"%Y-%m-%d")
-TODAY_BACKUP_DIR="$BACKUP_DIR/$TODAY"
 MAX_RETRIES=3
 RETRY_DELAY=60 # in seconds
 SUCCESS=false
 
-# Array of databases to exclude
-EXCLUDED_DATABASES=("app_tdmoodleserver")  # Add the names of databases to exclude 
-
-# Construct the exclude database command part
-EXCLUDE_CMD=""
-for DB in "${EXCLUDED_DATABASES[@]}"; do
-    EXCLUDE_CMD+=" --excludeDatabase=$DB"
-done
+# Array of databases to back up (excluding large one)
+DATABASES=("AUGSD" "ID-dev" "TDLeave" "TDLeaves" "TDLeavess" "admin" "airnotifier" "app_moodlecmsandroidgcm" "config" "dbName" "local" "medical")
 
 # Ensure backup directory exists
-mkdir -p $TODAY_BACKUP_DIR
+mkdir -p $BACKUP_DIR
 
 # Perform the backup with retries
 echo "$(date) - Starting backup for $TODAY" >> $LOG_FILE
-for (( i=1; i<=MAX_RETRIES; i++ ))
-do
-    mongodump --out $TODAY_BACKUP_DIR $EXCLUDE_CMD >> $LOG_FILE 2>&1
-    if [ $? -eq 0 ]; then
-        echo "$(date) - Backup successful on attempt $i" >> $LOG_FILE
-        SUCCESS=true
-        break
-    else
-        echo "$(date) - Backup attempt $i failed" >> $LOG_FILE
-        sleep $RETRY_DELAY
+for DB in "${DATABASES[@]}"; do
+    TODAY_BACKUP_DIR="$BACKUP_DIR/$DB/$TODAY"
+    mkdir -p "$TODAY_BACKUP_DIR"  # Create directory for today's backup for this database
+
+    for (( i=1; i<=MAX_RETRIES; i++ )); do
+        echo "$(date) - Starting backup for database: $DB" >> $LOG_FILE
+        mongodump --db "$DB" --out "$TODAY_BACKUP_DIR" >> $LOG_FILE 2>&1
+        
+        if [ $? -eq 0 ]; then
+            echo "$(date) - Backup successful for database: $DB on attempt $i" >> $LOG_FILE
+            SUCCESS=true
+            break
+        else
+            echo "$(date) - Backup attempt $i failed for database: $DB" >> $LOG_FILE
+            sleep $RETRY_DELAY
+        fi
+    done
+
+    if [ "$SUCCESS" = false ]; then
+        echo "$(date) - Backup failed for database: $DB after $MAX_RETRIES attempts." >> $LOG_FILE
     fi
+
+    SUCCESS=false  # Reset success flag for the next database
 done
 
-# If the backup was successful, delete yesterday's backup
+# If any backup was successful, delete yesterday's backups for those databases
 if [ "$SUCCESS" = true ]; then
-    if [ -d "$BACKUP_DIR/$YESTERDAY" ]; then
-        echo "$(date) - Removing yesterday's backup: $YESTERDAY" >> $LOG_FILE
-        rm -rf "$BACKUP_DIR/$YESTERDAY" >> $LOG_FILE 2>&1
-    fi
+    for DB in "${DATABASES[@]}"; do
+        if [ -d "$BACKUP_DIR/$DB/$YESTERDAY" ]; then
+            echo "$(date) - Removing yesterday's backup for database: $DB" >> $LOG_FILE
+            rm -rf "$BACKUP_DIR/$DB/$YESTERDAY" >> $LOG_FILE 2>&1
+        fi
+    done
 else
-    echo "$(date) - Backup failed after $MAX_RETRIES attempts. Yesterday's backup not deleted." >> $LOG_FILE
+    echo "$(date) - Backup failed for all databases. Yesterday's backups not deleted." >> $LOG_FILE
 fi
 
 echo "$(date) - Backup process completed" >> $LOG_FILE
