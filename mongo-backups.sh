@@ -10,6 +10,15 @@ MAX_RETRIES=3
 RETRY_DELAY=60 # in seconds
 SUCCESS=false
 
+# Array of databases to exclude
+EXCLUDED_DATABASES=("app_tdmoodleserver")  # Add the names of databases to exclude 
+
+# Construct the exclude database command part
+EXCLUDE_CMD=""
+for DB in "${EXCLUDED_DATABASES[@]}"; do
+    EXCLUDE_CMD+=" --excludeDatabase=$DB"
+done
+
 # Ensure backup directory exists
 mkdir -p $TODAY_BACKUP_DIR
 
@@ -17,7 +26,7 @@ mkdir -p $TODAY_BACKUP_DIR
 echo "$(date) - Starting backup for $TODAY" >> $LOG_FILE
 for (( i=1; i<=MAX_RETRIES; i++ ))
 do
-    mongodump --out $TODAY_BACKUP_DIR >> $LOG_FILE 2>&1
+    mongodump --out $TODAY_BACKUP_DIR $EXCLUDE_CMD >> $LOG_FILE 2>&1
     if [ $? -eq 0 ]; then
         echo "$(date) - Backup successful on attempt $i" >> $LOG_FILE
         SUCCESS=true
