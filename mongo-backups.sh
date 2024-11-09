@@ -62,3 +62,9 @@ if [ ${#FAILED_BACKUPS[@]} -eq 0 ]; then
 else
     echo "$(date) - Backup process completed with failures for the following databases: ${FAILED_BACKUPS[*]}" >> "$LOG_FILE"
 fi
+
+# Check if all backups for yesterday have been deleted, then remove yesterday's parent folder if empty
+if [ -d "$BACKUP_BASE_DIR/$YESTERDAY" ] && [ -z "$(ls -A "$BACKUP_BASE_DIR/$YESTERDAY")" ]; then
+    echo "$(date) - All backups from yesterday were removed; deleting the parent folder: $BACKUP_BASE_DIR/$YESTERDAY" >> "$LOG_FILE"
+    rm -rf "$BACKUP_BASE_DIR/$YESTERDAY" >> "$LOG_FILE" 2>&1
+fi
